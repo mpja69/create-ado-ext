@@ -1,0 +1,11 @@
+{
+	"name": "create-ado-ext",
+	"version": "0.1.0",
+	"type": "module",
+	"bin": {
+		"create-ado-ext": "./src/cli.mjs"
+	},
+	"dependencies": {
+		"adm-zip": "^0.5.16"
+	}
+}
