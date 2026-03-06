@@ -9,7 +9,10 @@
 		"bump:patch": "npm version patch --no-git-tag-version",
 		"bump:minor": "npm version minor --no-git-tag-version",
 		"bump:major": "npm version major --no-git-tag-version",
-		"zip": "npm run build && node scripts/zip.mjs"
+		"release:notes": "node scripts/prepare-release-notes.mjs",
+		"release:changelog": "node scripts/update-changelog.mjs",
+		"zip": "npm run build && node scripts/zip.mjs",
+		"release": "npm run release:notes && npm run release:changelog && npm run zip"
 	},
 	"devDependencies": {
 		"adm-zip": "^0.5.10",
