@@ -1,11 +1,6 @@
-// src/ts/fetch.ts
+// src/ts/infrastructure/fetch.ts
 import { adoFetch, safeJson, SessionExpiredError, type BridgeRes } from "./http";
-
-// ---- Minimal types (flytta gärna till types.ts) ----
-export type Iteration = { name: string; path: string; startDate: string; finishDate: string };
-export type BoardColumn = { name: string; mappedState: string };
-export type ProjectTeam = { id: string; name: string };
-export type TeamConfig = { defaultAreaPath: string; includeChildrenDefault: boolean };
+import { Iteration, BoardColumn, ProjectTeam, TeamConfig } from "./types"
 
 // ---- Favorites ----
 type Favorite = { artifactName: string };
@@ -192,4 +187,94 @@ export async function fetchProjectTeams(org: string, projectId: string): Promise
 	}
 
 	return out;
+}
+
+export async function runWiqlQuery(query: string, org: string, projectId: string): Promise<number[]> {
+
+	const wiql = { query: query };
+	const url = `https://dev.azure.com/${org}/${encodeURIComponent(projectId)}/_apis/wit/wiql?api-version=7.1`;
+	const res = await adoFetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(wiql),
+	});
+
+	let data: { workItems?: Array<{ id: number }> };
+	try {
+		data = await safeJson<typeof data>(res, "wiql");
+	} catch (err) {
+		if (err instanceof SessionExpiredError) throw err;
+		throw new Error("[WIQL] request failed");
+	}
+
+	return (data.workItems ?? []).map((x) => x.id);
+}
+// Example custom fields:
+// [
+// 	"System.Id",
+// 	"System.Title",
+// 	"System.State",
+// 	"System.Tags",
+// 	"System.BoardColumn",
+// 	"Microsoft.VSTS.Common.ActivatedDate",
+// 	"Microsoft.VSTS.Common.ClosedDate",
+// 	"System.Parent",
+// ]
+export async function fetchWorkItemsBatch(
+	org: string,
+	ids: number[],
+	fields?: string[]
+): Promise<any[]> {
+
+	if (ids.length === 0) return [];
+
+	const body: any = { ids };
+
+	if (fields && fields.length > 0) {
+		body.fields = fields;
+	}
+
+	const url = `https://dev.azure.com/${org}/_apis/wit/workitemsbatch?api-version=7.1`;
+
+	const res = await adoFetch(url, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
+
+	let data: { value?: any[] };
+	try {
+		data = await safeJson<typeof data>(res, "workitemsbatch");
+	} catch (err) {
+		if (err instanceof SessionExpiredError) throw err;
+		throw new Error("[workitemsbatch] request failed");
+	}
+
+	return data.value ?? [];
+}
+
+
+export async function fetchWorkItem(org: string, id: number, fields?: string[]): Promise<any | null> {
+
+	const fieldsParam =
+		fields && fields.length > 0
+			? `&fields=${encodeURIComponent(fields.join(","))}`
+			: "";
+
+	const url =
+		`https://dev.azure.com/${org}/_apis/wit/workitems/${id}?api-version=7.1${fieldsParam}`;
+
+	const res = await adoFetch(url, {
+		method: "GET",
+	});
+
+	let data: any;
+	try {
+		data = await safeJson<any>(res, "workitem");
+	} catch (err) {
+		if (err instanceof SessionExpiredError) throw err;
+		throw new Error("[workitem] request failed");
+	}
+
+	return data ?? null;
 }

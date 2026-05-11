@@ -38,7 +38,7 @@ port receiveTeamCatalog : (D.Value -> msg) -> Sub msg
 
 
 
--- NEW: TS tells Elm "all ports are wired, you may start requesting data now"
+-- TS -> Elm: all ports are wired, safe to start requesting data now
 
 
 port appReady : (() -> msg) -> Sub msg
@@ -59,8 +59,7 @@ init flags =
     ( { teamSelector = TeamSelector.init flags.initialSelectedTeamId
       , version = flags.appVersion
       }
-      -- CHANGED:
-      -- Vi gör INTE requestTeamCatalog här längre, annars riskerar vi race condition.
+      -- requestTeamCatalog is deferred until appReady fires to avoid a race condition.
     , Cmd.none
     )
 
@@ -82,16 +81,12 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        -- NEW:
-        -- Första "kick"-en när TS säger att allt är redo.
         AppReady ->
             ( model
             , requestTeamCatalog ()
             )
 
         GotTeamCatalog value ->
-            -- Exempel: vi förväntar oss { teams: [...], favorites: [...] }
-            -- (Du har redan detta decode i ditt projekt, så behåll din befintliga variant om du har en.)
             let
                 decodeTeamMini =
                     D.map2 (\id name -> { id = id, name = name })
@@ -141,10 +136,8 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ -- NEW: vänta på att TS säger "ready"
-          appReady (\_ -> AppReady)
-        , -- TS -> Elm: katalog + favorites
-          receiveTeamCatalog GotTeamCatalog
+        [ appReady (\_ -> AppReady)
+        , receiveTeamCatalog GotTeamCatalog
         ]
 
 

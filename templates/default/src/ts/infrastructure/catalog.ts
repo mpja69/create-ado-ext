@@ -1,9 +1,5 @@
 import { fetchProjectId, fetchProjectTeams } from "./fetch";
-
-export type ProjectTeam = {
-	id: string;
-	name: string;
-};
+import { ProjectTeam } from "./types";
 
 export type CatalogContext = {
 	org: string;
