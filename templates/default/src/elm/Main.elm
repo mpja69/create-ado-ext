@@ -5,7 +5,7 @@ port module Main exposing (main)
 
 import Browser
 import Controls.TeamSelector as TeamSelector
-import Html exposing (Html, div, text)
+import Html exposing (Html, div, p, span, text)
 import Html.Attributes as A
 import Json.Decode as D
 
@@ -37,6 +37,9 @@ port selectedTeamChanged : String -> Cmd msg
 port receiveTeamCatalog : (D.Value -> msg) -> Sub msg
 
 
+port receiveAppError : (D.Value -> msg) -> Sub msg
+
+
 
 -- TS -> Elm: all ports are wired, safe to start requesting data now
 
@@ -51,6 +54,7 @@ port appReady : (() -> msg) -> Sub msg
 type alias Model =
     { teamSelector : TeamSelector.Model
     , version : String
+    , error : Maybe String
     }
 
 
@@ -58,6 +62,7 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { teamSelector = TeamSelector.init flags.initialSelectedTeamId
       , version = flags.appVersion
+      , error = Nothing
       }
       -- requestTeamCatalog is deferred until appReady fires to avoid a race condition.
     , Cmd.none
@@ -71,6 +76,7 @@ init flags =
 type Msg
     = TeamSelectorMsg TeamSelector.Msg
     | GotTeamCatalog D.Value
+    | GotAppError D.Value
     | AppReady
 
 
@@ -112,6 +118,14 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        GotAppError value ->
+            let
+                message =
+                    D.decodeValue (D.field "message" D.string) value
+                        |> Result.withDefault "An unexpected error occurred."
+            in
+            ( { model | error = Just message }, Cmd.none )
+
         TeamSelectorMsg subMsg ->
             let
                 ( ts, maybeSelectedTeamId ) =
@@ -120,7 +134,6 @@ update msg model =
                 cmd =
                     case maybeSelectedTeamId of
                         Just teamId ->
-                            -- Elm -> TS (spara i storage etc)
                             selectedTeamChanged teamId
 
                         Nothing ->
@@ -138,6 +151,7 @@ subscriptions _ =
     Sub.batch
         [ appReady (\_ -> AppReady)
         , receiveTeamCatalog GotTeamCatalog
+        , receiveAppError GotAppError
         ]
 
 
@@ -148,7 +162,15 @@ subscriptions _ =
 view : Model -> Html Msg
 view model =
     div [ A.class "p-4" ]
-        [ TeamSelector.view model.teamSelector |> Html.map TeamSelectorMsg
+        [ case model.error of
+            Just err ->
+                div [ A.class "mb-4 p-4 rounded-lg bg-red-50 border border-red-200" ]
+                    [ p [ A.class "text-sm font-semibold text-red-800" ] [ text "Something went wrong" ]
+                    , p [ A.class "text-sm text-red-700 mt-1" ] [ text err ]
+                    ]
+
+            Nothing ->
+                TeamSelector.view model.teamSelector |> Html.map TeamSelectorMsg
         , div [ A.class "mt-4 text-xs opacity-60" ]
             [ text ("Version " ++ model.version) ]
         ]

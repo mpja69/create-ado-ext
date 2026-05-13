@@ -9,7 +9,7 @@
 // - Init feature modules (teams)
 
 import { APP_VERSION } from "./infrastructure/version";
-import { setBridgeToken } from "./infrastructure/http";
+import { setBridgeToken, SessionExpiredError } from "./infrastructure/http";
 import { initCatalog } from "./infrastructure/catalog";
 import * as teams from "./modules/teams";
 
@@ -81,12 +81,24 @@ function waitForInit(): Promise<{ ctx: AppContext; token: string }> {
 	setBridgeToken(token);
 
 	// 5) Load shared catalog cache (teams)
-	await initCatalog(ctx.org, ctx.project);
+	try {
+		await initCatalog(ctx.org, ctx.project);
+	} catch (e) {
+		// Wire ports so Elm can receive the error message
+		teams.init(app, ctx);
+
+		const message = e instanceof SessionExpiredError
+			? "Your Azure DevOps session has expired. Please reload the page to sign in again."
+			: "Failed to connect to Azure DevOps. Please reload the page and try again.";
+
+		app.ports.receiveAppError?.send({ source: "startup", message });
+		return;
+	}
 
 	// 6) Init feature modules
 	teams.init(app, ctx);
 
-	// 7) NEW: Signalera till Elm att ports + infra är redo
-	// Elm kommer då att trigga requestTeamCatalog ()
+	// 7) Signal to Elm that ports + infrastructure are ready;
+	// Elm will then fire requestTeamCatalog ()
 	app.ports.appReady?.send(null);
 })();

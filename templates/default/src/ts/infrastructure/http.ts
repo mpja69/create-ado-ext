@@ -17,7 +17,7 @@ function looksLikeSigninHtml(s: string): boolean {
 
 let sessionExpired = false;
 
-// Tokenet kommer från app.ts (init-message). Vi vill kunna uppdatera det efter init.
+// Token arrives from app.ts via the init message. Mutable so it can be set after startup.
 let _token = "";
 export function setBridgeToken(token: string) {
 	_token = token;
@@ -36,7 +36,7 @@ const { adoFetchText } = createAdoFetchClient({
 	timeoutMs: 15_000,
 });
 
-// “HTTP” för ADO via bryggan
+// ADO fetch via the content-script bridge
 export async function adoFetch(url: string, init?: RequestInit): Promise<BridgeRes> {
 	if (sessionExpired) {
 		throw new SessionExpiredError("Session appears expired (short-circuit)", {
@@ -48,8 +48,8 @@ export async function adoFetch(url: string, init?: RequestInit): Promise<BridgeR
 
 	const res = await adoFetchText(url, init);
 
-	// Om det ser ut som sign-in, slå på fuse så allt failar snabbt efteråt
-	if ((!res.ok && (res.status === 0 || looksLikeSigninHtml(res.body))) || looksLikeSigninHtml(res.body)) {
+	// If the response looks like a sign-in page, trip the fuse so subsequent calls fail fast
+	if ((!res.ok && (res.status === 0 || res.status === 401 || looksLikeSigninHtml(res.body))) || looksLikeSigninHtml(res.body)) {
 		sessionExpired = true;
 		throw new SessionExpiredError("Session appears expired", {
 			status: res.status,
@@ -61,12 +61,12 @@ export async function adoFetch(url: string, init?: RequestInit): Promise<BridgeR
 	return res;
 }
 
-// JSON-parse med bra fel + session-expired detection
+// JSON-parse with proper error handling and session-expired detection
 export async function safeJson<T = any>(res: BridgeRes, context: string): Promise<T> {
 	const { ok, status, ct, body } = res;
 
 	if (!ok) {
-		if (status === 0 || looksLikeSigninHtml(body)) {
+		if (status === 0 || status === 401 || looksLikeSigninHtml(body)) {
 			sessionExpired = true;
 			throw new SessionExpiredError("Session appears expired", { status, ct, preview: body.slice(0, 200) });
 		}
